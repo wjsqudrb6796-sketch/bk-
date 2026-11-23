@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>학기 중 루틴 트래커 · 주·월간 회고</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Noto Sans KR"', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body {
+      font-family: "Noto Sans KR", "Inter", system-ui, -apple-system, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .routine-check:checked + .routine-body .routine-title {
+      text-decoration: line-through;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900 antialiased">
+  <!-- 상단 헤더 -->
+  <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <div class="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div>
+        <div class="flex flex-wrap items-center gap-2">
+          <h1 class="text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">
+            학기 중 루틴 트래커
+          </h1>
+          <span
+            id="saveStatusBadge"
+            class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20"
+          >
+            <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+            자동 저장됨
+          </span>
+        </div>
+        <p class="mt-0.5 text-xs text-slate-500">
+          브라우저 저장소(localStorage · IndexedDB) 자동 저장 · 탭을 닫거나 새로고침해도 기록 유지
+        </p>
+      </div>
+
+      <!-- JSON 백업/복원 및 현재 요일 초기화 -->
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          id="exportJsonBtn"
+          type="button"
+          class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 active:scale-[0.99]"
+        >
+          JSON 내보내기
+        </button>
+        <button
+          id="importJsonBtn"
+          type="button"
+          class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 active:scale-[0.99]"
+        >
+          JSON 불러오기
+        </button>
+        <input id="importFileInput" type="file" accept="application/json,.json" class="hidden" />
+        <button
+          id="resetDayBtn"
+          type="button"
+          class="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 active:scale-[0.99]"
+        >
+          요일 초기화
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 안내 메시지 박스 (alert 대체) -->
+  <div id="statusBanner" class="mx-auto mt-3 hidden max-w-4xl px-4 sm:px-6">
+    <div id="statusBannerInner" class="flex items-center justify-between rounded-2xl border px-4 py-3 text-xs font-medium">
+      <span id="statusBannerText"></span>
+      <button id="statusBannerClose" type="button" class="ml-4 font-bold opacity-75 hover:opacity-100">
+        닫기
+      </button>
+    </div>
+  </div>
+
+  <main class="mx-auto max-w-4xl space-y-6 px-4 py-5 sm:px-6 sm:py-7">
+    <!-- 명언 카드 -->
+    <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:p-5">
+      <div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <span class="rounded-lg bg-slate-900 px-2 py-0.5 text-[11px] font-bold text-white">명언</span>
+            <span id="quoteTag" class="text-xs font-semibold text-indigo-600"></span>
+          </div>
+          <p id="quoteSentence" class="pt-1 text-sm font-bold leading-relaxed text-slate-900 sm:text-base"></p>
+          <p id="quoteSource" class="text-xs text-slate-500"></p>
+        </div>
+        <button
+          id="cycleQuoteBtn"
+          type="button"
+          class="shrink-0 self-start rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+        >
+          명언 바꾸기
+        </button>
+      </div>
+    </section>
+
+    <!-- 요일 탭 선택 & 달성률 -->
+    <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:p-5">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 class="text-sm font-bold text-slate-800">요일 선택</h2>
+          <p id="dayScheduleSubtitle" class="mt-0.5 text-xs text-slate-500"></p>
+        </div>
+        <span id="dayTypeBadge" class="inline-flex w-fit items-center rounded-xl px-3 py-1 text-xs font-bold"></span>
+      </div>
+
+      <div id="dayTabs" class="mt-4 grid grid-cols-4 gap-2 sm:grid-cols-7"></div>
+
+      <div class="mt-5 rounded-xl bg-slate-50 p-3.5 ring-1 ring-inset ring-slate-200/80">
+        <div class="flex items-center justify-between text-xs font-bold">
+          <span class="text-slate-700">달성률</span>
+          <span id="completionSummary" class="text-indigo-600">0 / 0 (0%)</span>
+        </div>
+        <div class="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+          <div id="completionBar" class="h-full rounded-full bg-indigo-600 transition-all duration-300" style="width: 0%;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 일일 루틴 체크리스트 & 메모 -->
+    <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:p-6">
+      <div class="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
+        <h2 id="routineSectionTitle" class="text-base font-extrabold text-slate-900 sm:text-lg"></h2>
+        <span class="text-xs text-slate-400">자동 저장</span>
+      </div>
+
+      <ul id="routineItems" class="space-y-2.5"></ul>
+
+      <div class="mt-5 border-t border-slate-100 pt-4">
+        <label for="dayMemoInput" class="block text-xs font-bold text-slate-700">
+          오늘 메모
+        </label>
+        <textarea
+          id="dayMemoInput"
+          rows="2"
+          placeholder="오늘 컨디션이나 특이사항을 기록하세요."
+          class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none"
+        ></textarea>
+      </div>
+    </section>
+
+    <!-- 주간 & 월간 돌아보기 -->
+    <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:p-6">
+      <div class="mb-4 border-b border-slate-100 pb-3">
+        <h2 class="text-base font-extrabold text-slate-900 sm:text-lg">주간 · 월간 돌아보기</h2>
+        <p class="mt-0.5 text-xs text-slate-500">주간 및 월간 회고 내용도 브라우저에 자동 저장됩니다.</p>
+      </div>
+
+      <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <!-- 주간 돌아보기 -->
+        <div class="space-y-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4">
+          <h3 class="text-sm font-extrabold text-slate-900">주간 돌아보기</h3>
+
+          <div>
+            <label for="weeklyKeepInput" class="block text-xs font-bold text-slate-700">
+              잘 지킨 점
+            </label>
+            <textarea
+              id="weeklyKeepInput"
+              rows="3"
+              placeholder="이번 주 유지한 루틴이나 잘한 점을 적어보세요."
+              class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none"
+            ></textarea>
+          </div>
+
+          <div>
+            <label for="weeklyImproveInput" class="block text-xs font-bold text-slate-700">
+              보완할 점 &amp; 다음 주 계획
+            </label>
+            <textarea
+              id="weeklyImproveInput"
+              rows="3"
+              placeholder="아쉬웠던 점과 다음 주에 조정할 내용을 적어보세요."
+              class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none"
+            ></textarea>
+          </div>
+        </div>
+
+        <!-- 월간 돌아보기 -->
+        <div class="space-y-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4">
+          <h3 class="text-sm font-extrabold text-slate-900">월간 돌아보기</h3>
+
+          <div>
+            <label for="monthlySummaryInput" class="block text-xs font-bold text-slate-700">
+              이번 달 흐름 &amp; 성과
+            </label>
+            <textarea
+              id="monthlySummaryInput"
+              rows="3"
+              placeholder="한 달간 생활 리듬과 학습·운동 흐름을 정리해보세요."
+              class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none"
+            ></textarea>
+          </div>
+
+          <div>
+            <label for="monthlyNextInput" class="block text-xs font-bold text-slate-700">
+              다음 달 목표
+            </label>
+            <textarea
+              id="monthlyNextInput"
+              rows="3"
+              placeholder="다음 달에 집중할 목표를 적어보세요."
+              class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none"
+            ></textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // =========================================================================
+    // 명언 목록
+    // =========================================================================
+    const QUOTES = [
+      {
+        tag: '실행력',
+        text: '작은 루틴을 정해진 시간에 반복하는 힘이 하루의 방향을 결정한다.',
+        source: '학기 중 루틴 원칙',
+      },
+      {
+        tag: '일관성',
+        text: '완벽한 하루보다 무너지지 않고 이어가는 하루가 쌓여 습관이 된다.',
+        source: '습관 기록',
+      },
+      {
+        tag: '회복과 수면',
+        text: '제시간에 자고 회복하는 것까지가 공부와 운동의 일부다.',
+        source: '컨디션 관리',
+      },
+      {
+        tag: '집중',
+        text: '정해진 시간에는 망설임 없이 시작하고, 쉬는 시간에는 확실히 쉰다.',
+        source: '시간 관리 기준',
+      },
+    ];
+
+    // =========================================================================
+    // 학기 중 요일 및 루틴 데이터
+    // =========================================================================
+    const DAY_LIST = [
+      { key: 'mon', short: '월', full: '월요일', kind: 'weekday' },
+      { key: 'tue', short: '화', full: '화요일', kind: 'weekday' },
+      { key: 'wed', short: '수', full: '수요일', kind: 'weekday' },
+      { key: 'thu', short: '목', full: '목요일', kind: 'weekday' },
+      { key: 'fri', short: '금', full: '금요일', kind: 'weekend' },
+      { key: 'sat', short: '토', full: '토요일', kind: 'weekend' },
+      { key: 'sun', short: '일', full: '일요일', kind: 'weekend' },
+    ];
+
+    const WEEKDAY_CLASSES = {
+      mon: '10~12시 피난설계론 · 13~15시 제연설비론 · 15~16시 소화설비론',
+      tue: '9~10시 폭발론 · 10~12시 소화설비론 · 13~17시 전기회로',
+      wed: '9~10시 피난설계론 · 11~12시 제연설비론 · 14~16시 폭발론 · 16~17시 취업·창업과꿈-설계',
+      thu: '10~13시 빅데이터와세상읽기 · 오후 공강 및 휴식',
+    };
+
+    function getItemsForDay(dayKey) {
+      const dayMeta = DAY_LIST.find((d) => d.key === dayKey) || DAY_LIST[0];
+      if (dayMeta.kind === 'weekday') {
+        const hasEveningNative = dayKey === 'tue' || dayKey === 'thu';
+        return [
+          {
+            id: 'wd-1',
+            time: '07:00 ~ 07:10',
+            title: '기상 · 계란 & 에너지드링크 · 몸풀기',
+            desc: '기상 직후 아침 준비',
+          },
+          {
+            id: 'wd-2',
+            time: '07:10 ~ 07:50',
+            title: '아침 운동 (최대 40분)',
+            desc: '08:20 버스 탑승 우선으로 시간 조절',
+          },
+          {
+            id: 'wd-3',
+            time: '07:50 ~ 08:10',
+            title: '샤워 및 외출 준비',
+            desc: '20분 내 준비 완료',
+          },
+          {
+            id: 'wd-4',
+            time: '08:10 ~ 08:45',
+            title: '정류장 이동 · 08:20 버스 · 천원의 아침밥',
+            desc: '등교 후 아침 식사',
+          },
+          {
+            id: 'wd-5',
+            time: '09:00 ~ 17:00',
+            title: '수업 및 체력 분배',
+            desc: WEEKDAY_CLASSES[dayKey],
+          },
+          {
+            id: 'wd-6',
+            time: '17:00 ~ 18:30',
+            title: '귀가 · 저녁 식사 · 18:30 알람 조약',
+            desc: '알람 미리 끄기·시간 변경·추가 알람 금지',
+          },
+          {
+            id: 'wd-7',
+            time: '18:30 ~ 21:30',
+            title: hasEveningNative
+              ? '원어민 회화(18:00~18:20) · 앱 영어(18:30~19:00) · 도서관 자격증 공부'
+              : '앱 영어회화(18:30~19:00) · 도서관 자격증 공부',
+            desc: '21:30 하산 기준 저녁 학습 시간',
+          },
+          {
+            id: 'wd-8',
+            time: '21:30 ~ 22:30',
+            title: '귀가 · 샤워 · 취침 준비 → 22:30 소등',
+            desc: '8시간 30분 수면 창 확보',
+          },
+        ];
+      }
+
+      return [
+        {
+          id: 'we-1',
+          time: '08:00 ~ 08:10',
+          title: '기상 · 계란 + 에너지드링크',
+          desc: '금~일 기상 루틴 시작',
+        },
+        {
+          id: 'we-2',
+          time: '08:10 ~ 08:50',
+          title: '아침 운동 (40분)',
+          desc: '컨디션 유지용 운동',
+        },
+        {
+          id: 'we-3',
+          time: '08:50 ~ 10:00',
+          title: '프로틴 쉐이크 + 명상(약 30분) · 샤워 · 아침식사',
+          desc: '10:00 도서관 출발 전 마무리',
+        },
+        {
+          id: 'we-4',
+          time: '10:00 ~ 12:00',
+          title: '도서관 공부 (오전)',
+          desc: '자격증·전공 집중 시간',
+        },
+        {
+          id: 'we-5',
+          time: '12:00 ~ 13:00',
+          title: '점심 식사 및 휴식',
+          desc: '오후 학습 전 재정비',
+        },
+        {
+          id: 'we-6',
+          time: '13:00 ~ 17:00',
+          title: '도서관 공부 (오후)',
+          desc: '문제 풀이 및 진도 마무리',
+        },
+        {
+          id: 'we-7',
+          time: '17:00 ~ 18:00',
+          title: '저녁 식사 · 주간 회고 & 다음 주 계획',
+          desc: '한 주 점검 및 다음 주 일정 정리',
+        },
+        {
+          id: 'we-8',
+          time: '18:00 ~ 22:30',
+          title: '자유시간 (간식·맥주는 21:00 이전)',
+          desc: '취침 1시간 30분 전까지 제한',
+        },
+        {
+          id: 'we-9',
+          time: '22:30',
+          title: '소등 및 취침',
+          desc: '일요일 밤 22:30 소등으로 월요일 07:00 기상 연결',
+        },
+      ];
+    }
+
+    // =========================================================================
+    // 저장소 계층 (localStorage + IndexedDB)
+    // =========================================================================
+    const LS_KEY = 'semester_routine_tracker_state_v1';
+    const IDB_NAME = 'SemesterRoutineTracker_IDB';
+    const IDB_STORE = 'state_store';
+    const IDB_KEY = 'current_state';
+
+    function detectTodayKey() {
+      const idx = new Date().getDay();
+      const order = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      return order[idx] || 'mon';
+    }
+
+    function buildDefaultState() {
+      return {
+        version: 1,
+        activeDay: detectTodayKey(),
+        quoteIndex: 0,
+        checks: {
+          mon: {},
+          tue: {},
+          wed: {},
+          thu: {},
+          fri: {},
+          sat: {},
+          sun: {},
+        },
+        memos: {
+          mon: '',
+          tue: '',
+          wed: '',
+          thu: '',
+          fri: '',
+          sat: '',
+          sun: '',
+        },
+        weekly: {
+          keep: '',
+          improve: '',
+        },
+        monthly: {
+          summary: '',
+          nextGoal: '',
+        },
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    function sanitizeState(raw) {
+      const def = buildDefaultState();
+      if (!raw || typeof raw !== 'object') return def;
+
+      const activeDay = DAY_LIST.some((d) => d.key === raw.activeDay) ? raw.activeDay : def.activeDay;
+      const checks = { ...def.checks };
+      const memos = { ...def.memos };
+
+      DAY_LIST.forEach((d) => {
+        if (raw.checks && typeof raw.checks[d.key] === 'object' && raw.checks[d.key] !== null) {
+          checks[d.key] = { ...raw.checks[d.key] };
+        }
+        if (raw.memos && typeof raw.memos[d.key] === 'string') {
+          memos[d.key] = raw.memos[d.key];
+        }
+      });
+
+      return {
+        version: 1,
+        activeDay,
+        quoteIndex: typeof raw.quoteIndex === 'number' && raw.quoteIndex >= 0 ? raw.quoteIndex % QUOTES.length : 0,
+        checks,
+        memos,
+        weekly: {
+          keep: raw.weekly && typeof raw.weekly.keep === 'string' ? raw.weekly.keep : '',
+          improve: raw.weekly && typeof raw.weekly.improve === 'string' ? raw.weekly.improve : '',
+        },
+        monthly: {
+          summary: raw.monthly && typeof raw.monthly.summary === 'string' ? raw.monthly.summary : '',
+          nextGoal: raw.monthly && typeof raw.monthly.nextGoal === 'string' ? raw.monthly.nextGoal : '',
+        },
+        updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date().toISOString(),
+      };
+    }
+
+    function openDb() {
+      return new Promise((resolve, reject) => {
+        if (!('indexedDB' in window)) {
+          reject(new Error('IndexedDB unavailable'));
+          return;
+        }
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(IDB_STORE)) {
+            db.createObjectStore(IDB_STORE, { keyPath: 'id' });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error || new Error('IndexedDB open error'));
+      });
+    }
+
+    async function loadFromIdb() {
+      try {
+        const db = await openDb();
+        return await new Promise((resolve, reject) => {
+          const tx = db.transaction(IDB_STORE, 'readonly');
+          const store = tx.objectStore(IDB_STORE);
+          const req = store.get(IDB_KEY);
+          req.onsuccess = () => resolve(req.result ? req.result.payload : null);
+          req.onerror = () => reject(req.error);
+        });
+      } catch (_) {
+        return null;
+      }
+    }
+
+    async function saveToIdb(state) {
+      try {
+        const db = await openDb();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(IDB_STORE, 'readwrite');
+          const store = tx.objectStore(IDB_STORE);
+          const req = store.put({ id: IDB_KEY, payload: state });
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(req.error);
+        });
+      } catch (_) {
+        // localStorage fallback already handled
+      }
+    }
+
+    function loadFromLs() {
+      try {
+        const str = localStorage.getItem(LS_KEY);
+        return str ? JSON.parse(str) : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function saveToLs(state) {
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify(state));
+      } catch (_) {
+        // ignore quota/private mode issues
+      }
+    }
+
+    let state = buildDefaultState();
+
+    async function persistAll() {
+      state.updatedAt = new Date().toISOString();
+      saveToLs(state);
+      await saveToIdb(state);
+      setBadge('자동 저장됨', true);
+    }
+
+    async function hydrateState() {
+      const lsCandidate = loadFromLs();
+      const idbCandidate = await loadFromIdb();
+
+      let selected = null;
+      if (lsCandidate && idbCandidate) {
+        const lsTs = Date.parse(lsCandidate.updatedAt || 0) || 0;
+        const idbTs = Date.parse(idbCandidate.updatedAt || 0) || 0;
+        selected = idbTs > lsTs ? idbCandidate : lsCandidate;
+      } else {
+        selected = lsCandidate || idbCandidate;
+      }
+
+      state = sanitizeState(selected);
+      saveToLs(state);
+      await saveToIdb(state);
+    }
+
+    // =========================================================================
+    // 렌더링 함수
+    // =========================================================================
+    function setBadge(text, ok) {
+      const el = document.getElementById('saveStatusBadge');
+      if (ok) {
+        el.className =
+          'inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20';
+        el.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>${text}`;
+      } else {
+        el.className =
+          'inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20';
+        el.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>${text}`;
+      }
+    }
+
+    function showBanner(msg, tone = 'info') {
+      const box = document.getElementById('statusBanner');
+      const inner = document.getElementById('statusBannerInner');
+      const textEl = document.getElementById('statusBannerText');
+
+      inner.className = 'flex items-center justify-between rounded-2xl border px-4 py-3 text-xs font-medium ';
+      if (tone === 'error') {
+        inner.className += 'border-rose-200 bg-rose-50 text-rose-800';
+      } else if (tone === 'success') {
+        inner.className += 'border-emerald-200 bg-emerald-50 text-emerald-800';
+      } else {
+        inner.className += 'border-indigo-200 bg-indigo-50 text-indigo-800';
+      }
+
+      textEl.textContent = msg;
+      box.classList.remove('hidden');
+    }
+
+    function renderQuoteArea() {
+      const q = QUOTES[state.quoteIndex % QUOTES.length];
+      document.getElementById('quoteTag').textContent = q.tag;
+      document.getElementById('quoteSentence').textContent = `“${q.text}”`;
+      document.getElementById('quoteSource').textContent = `— ${q.source}`;
+    }
+
+    function renderDayTabsArea() {
+      const tabsEl = document.getElementById('dayTabs');
+      tabsEl.innerHTML = '';
+
+      DAY_LIST.forEach((day) => {
+        const isCurrent = state.activeDay === day.key;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = isCurrent
+          ? 'flex flex-col items-center justify-center rounded-xl bg-indigo-600 py-2.5 px-2 text-white shadow-xs transition'
+          : 'flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-2 text-slate-700 transition hover:bg-slate-100';
+
+        const items = getItemsForDay(day.key);
+        const dayChecks = state.checks[day.key] || {};
+        const done = items.filter((it) => Boolean(dayChecks[it.id])).length;
+
+        btn.innerHTML = `
+          <span class="text-xs font-extrabold">${day.short}</span>
+          <span class="mt-0.5 text-[10px] ${isCurrent ? 'text-indigo-100' : 'text-slate-500'}">${done}/${items.length}</span>
+        `;
+
+        btn.addEventListener('click', async () => {
+          state.activeDay = day.key;
+          renderAll();
+          await persistAll();
+        });
+
+        tabsEl.appendChild(btn);
+      });
+    }
+
+    function renderChecklistArea() {
+      const dayMeta = DAY_LIST.find((d) => d.key === state.activeDay) || DAY_LIST[0];
+      const badge = document.getElementById('dayTypeBadge');
+      const subtitle = document.getElementById('dayScheduleSubtitle');
+      const heading = document.getElementById('routineSectionTitle');
+
+      if (dayMeta.kind === 'weekday') {
+        badge.className =
+          'inline-flex w-fit items-center rounded-xl bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700 ring-1 ring-inset ring-indigo-600/20';
+        badge.textContent = '학기 중 평일 (월~목)';
+        subtitle.textContent = '07:00 기상 · 08:20 버스 · 수업 · 18:30 알람 조약 & 저녁 공부 · 22:30 소등';
+      } else {
+        badge.className =
+          'inline-flex w-fit items-center rounded-xl bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-inset ring-emerald-600/20';
+        badge.textContent = '학기 중 공강·주말 (금~일)';
+        subtitle.textContent = '08:00 기상 · 운동·쉐이크·명상·아침 · 10:00 도서관 · 17:00 주간 회고 · 22:30 소등';
+      }
+
+      heading.textContent = `${dayMeta.full} 루틴 체크리스트`;
+
+      const items = getItemsForDay(dayMeta.key);
+      const dayChecks = state.checks[dayMeta.key] || {};
+      const listEl = document.getElementById('routineItems');
+      listEl.innerHTML = '';
+
+      let checkedCount = 0;
+
+      items.forEach((item) => {
+        const isChecked = Boolean(dayChecks[item.id]);
+        if (isChecked) checkedCount += 1;
+
+        const li = document.createElement('li');
+        li.className = `rounded-xl border transition ${
+          isChecked ? 'border-indigo-200 bg-indigo-50/40' : 'border-slate-200 bg-white hover:border-slate-300'
+        }`;
+
+        const label = document.createElement('label');
+        label.className = 'flex cursor-pointer items-start gap-3.5 p-3.5 sm:p-4';
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = isChecked;
+        cb.className = 'routine-check mt-0.5 h-5 w-5 shrink-0 rounded-lg border-slate-300 text-indigo-600 focus:ring-indigo-500';
+
+        cb.addEventListener('change', async () => {
+          setBadge('저장 중...', false);
+          if (!state.checks[dayMeta.key]) state.checks[dayMeta.key] = {};
+          state.checks[dayMeta.key][item.id] = cb.checked;
+          await persistAll();
+          renderDayTabsArea();
+          renderChecklistArea();
+        });
+
+        const body = document.createElement('div');
+        body.className = 'routine-body min-w-0 flex-1';
+        body.innerHTML = `
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">${item.time}</span>
+            <span class="routine-title text-sm font-bold text-slate-900">${item.title}</span>
+          </div>
+          <p class="mt-1 text-xs leading-relaxed text-slate-500">${item.desc}</p>
+        `;
+
+        label.appendChild(cb);
+        label.appendChild(body);
+        li.appendChild(label);
+        listEl.appendChild(li);
+      });
+
+      const total = items.length;
+      const pct = total > 0 ? Math.round((checkedCount / total) * 100) : 0;
+      document.getElementById('completionSummary').textContent = `${checkedCount} / ${total} (${pct}%)`;
+      document.getElementById('completionBar').style.width = `${pct}%`;
+      document.getElementById('dayMemoInput').value = state.memos[dayMeta.key] || '';
+    }
+
+    function renderReflectionsArea() {
+      document.getElementById('weeklyKeepInput').value = state.weekly.keep || '';
+      document.getElementById('weeklyImproveInput').value = state.weekly.improve || '';
+      document.getElementById('monthlySummaryInput').value = state.monthly.summary || '';
+      document.getElementById('monthlyNextInput').value = state.monthly.nextGoal || '';
+    }
+
+    function renderAll() {
+      renderQuoteArea();
+      renderDayTabsArea();
+      renderChecklistArea();
+      renderReflectionsArea();
+    }
+
+    // =========================================================================
+    // 이벤트 연결
+    // =========================================================================
+    function attachListeners() {
+      document.getElementById('statusBannerClose').addEventListener('click', () => {
+        document.getElementById('statusBanner').classList.add('hidden');
+      });
+
+      document.getElementById('cycleQuoteBtn').addEventListener('click', async () => {
+        state.quoteIndex = (state.quoteIndex + 1) % QUOTES.length;
+        renderQuoteArea();
+        await persistAll();
+      });
+
+      document.getElementById('dayMemoInput').addEventListener('input', async (e) => {
+        setBadge('저장 중...', false);
+        state.memos[state.activeDay] = e.target.value;
+        await persistAll();
+      });
+
+      const bindField = (id, group, key) => {
+        document.getElementById(id).addEventListener('input', async (e) => {
+          setBadge('저장 중...', false);
+          state[group][key] = e.target.value;
+          await persistAll();
+        });
+      };
+
+      bindField('weeklyKeepInput', 'weekly', 'keep');
+      bindField('weeklyImproveInput', 'weekly', 'improve');
+      bindField('monthlySummaryInput', 'monthly', 'summary');
+      bindField('monthlyNextInput', 'monthly', 'nextGoal');
+
+      document.getElementById('resetDayBtn').addEventListener('click', async () => {
+        const key = state.activeDay;
+        state.checks[key] = {};
+        await persistAll();
+        renderDayTabsArea();
+        renderChecklistArea();
+        const fullName = (DAY_LIST.find((d) => d.key === key) || DAY_LIST[0]).full;
+        showBanner(`${fullName} 체크 항목을 초기화했습니다.`, 'info');
+      });
+
+      document.getElementById('exportJsonBtn').addEventListener('click', () => {
+        try {
+          const jsonStr = JSON.stringify(state, null, 2);
+          const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const stamp = new Date().toISOString().slice(0, 10);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `routine-backup-${stamp}.json`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          showBanner('JSON 백업 파일을 다운로드했습니다.', 'success');
+        } catch (err) {
+          console.error('Export failed:', err);
+          showBanner('JSON 내보내기 중 오류가 발생했습니다.', 'error');
+        }
+      });
+
+      const fileInput = document.getElementById('importFileInput');
+      document.getElementById('importJsonBtn').addEventListener('click', () => {
+        fileInput.value = '';
+        fileInput.click();
+      });
+
+      fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const parsed = JSON.parse(text);
+          if (!parsed || typeof parsed !== 'object') {
+            throw new Error('Invalid JSON structure');
+          }
+          state = sanitizeState(parsed);
+          await persistAll();
+          renderAll();
+          showBanner('JSON 백업 데이터를 불러왔습니다.', 'success');
+        } catch (err) {
+          console.error('Import failed:', err);
+          showBanner('JSON 파일을 불러올 수 없습니다. 올바른 백업 파일인지 확인하세요.', 'error');
+        }
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      attachListeners();
+      await hydrateState();
+      renderAll();
+    });
+  </script>
+</body>
+</html>
